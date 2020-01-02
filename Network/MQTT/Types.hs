@@ -60,22 +60,22 @@ module Network.MQTT.Types
   -- library, they are mostly used internally to get better guarantees
   -- about the flow of 'Message's.
   , toSMsgType
-  , SMsgType
+  , SMsgType( SCONNECT
+            , SCONNACK
+            , SPUBLISH
+            , SPUBACK
+            , SPUBREC
+            , SPUBREL
+            , SPUBCOMP
+            , SSUBSCRIBE
+            , SSUBACK
+            , SUNSUBSCRIBE
+            , SUNSUBACK
+            , SPINGREQ
+            , SPINGRESP
+            , SDISCONNECT)
   , withSomeSingI
-  , Sing( SCONNECT
-        , SCONNACK
-        , SPUBLISH
-        , SPUBACK
-        , SPUBREC
-        , SPUBREL
-        , SPUBCOMP
-        , SSUBSCRIBE
-        , SSUBACK
-        , SUNSUBSCRIBE
-        , SUNSUBACK
-        , SPINGREQ
-        , SPINGRESP
-        , SDISCONNECT)
+  , Sing
   ) where
 
 import Control.Exception (Exception)

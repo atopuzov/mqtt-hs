@@ -235,7 +235,7 @@ parseLength n = do
       else put $ rem - n
 
 -- | Convert a number to a 'QoS'. 'fail' if the number can't be converted.
-toQoS :: (Num a, Eq a, Show a, Monad m) => a -> m QoS
+toQoS :: (Num a, Eq a, Show a, MonadFail m) => a -> m QoS
 toQoS 0 = return NoConfirm
 toQoS 1 = return Confirm
 toQoS 2 = return Handshake
