@@ -20,13 +20,13 @@ import Data.Maybe (isJust)
 import Data.Monoid ((<>), mconcat, mempty)
 import Data.Word (Word8)
 import Data.Text.Encoding (encodeUtf8)
-import System.IO (Handle)
+import Network.Connection
 
 import Network.MQTT.Types
 
 -- | Directly write a 'Message' to the buffer of a 'Handle'.
-writeTo :: Handle -> Message t -> IO ()
-writeTo h msg = hPutBuilder h (putMessage msg)
+writeTo :: Connection -> Message t -> IO ()
+writeTo h msg = connectionPut h (BSL.toStrict . toLazyByteString $ putMessage msg)
 
 -- | Generate a 'Builder' for any 'Message'.
 putMessage :: Message t -> Builder
