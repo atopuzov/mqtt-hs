@@ -23,6 +23,7 @@ module Network.MQTT
   -- ** Config accessors
   , cHost
   , cPort
+  , cTLS
   , cClean
   , cWill
   , cUsername
@@ -49,8 +50,7 @@ import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.Maybe (fromJust)
 import Data.Unique
-import Network
-import System.IO (hSetBinaryMode)
+import Network.Connection
 
 import Network.MQTT.Internal
 import Network.MQTT.Types
@@ -62,6 +62,7 @@ defaultConfig :: Commands -> TChan (Message 'PUBLISH) -> Config
 defaultConfig commands published = Config
     { cHost             = "localhost"
     , cPort             = 1883
+    , cTLS              = Nothing
     , cClean            = True
     , cWill             = Nothing
     , cUsername         = Nothing
@@ -82,11 +83,16 @@ defaultConfig commands published = Config
 -- Exceptions are propagated.
 run :: Config -> IO Terminated
 run conf = do
-    h <- connectTo (cHost conf) (PortNumber $ cPort conf)
-    hSetBinaryMode h True
+    ctx <- initConnectionContext
+    c <- connectTo ctx $ ConnectionParams
+         { connectionHostname  = cHost conf
+         , connectionPort      = cPort conf
+         , connectionUseSecure = cTLS conf
+         , connectionUseSocks  = Nothing
+         }
     terminatedVar <- newEmptyTMVarIO
     sendSignal <- newEmptyMVar
-    mainLoop conf h (readTMVar terminatedVar) sendSignal
+    mainLoop conf c (readTMVar terminatedVar) sendSignal
       `finally` atomically (putTMVar terminatedVar ())
 
 -- | Close the connection after sending a 'Disconnect' message.
@@ -141,4 +147,3 @@ publish mqtt qos retain topic body = do
                  (Message (Header False Confirm False)
                           (PubRel (fromJust msgID)))
                  SPUBCOMP
-

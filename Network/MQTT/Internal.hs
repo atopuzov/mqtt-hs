@@ -58,8 +58,8 @@ import Data.Singletons (SingI(..))
 import Data.Singletons.Decide
 import Data.Text (Text)
 import Data.Word (Word16)
-import Network
-import System.IO (Handle, hLookAhead)
+import Network.Connection
+import Network.Socket (HostName, PortNumber)
 import System.Timeout (timeout)
 
 import Network.MQTT.Types
@@ -113,6 +113,8 @@ data Config
         -- ^ Hostname of the broker.
         , cPort :: PortNumber
         -- ^ Port of the broker.
+        , cTLS :: Maybe TLSSettings
+        -- ^ TLS settings
         , cClean :: Bool
         -- ^ Should the server forget subscriptions and other state on
         -- disconnects?
@@ -213,15 +215,15 @@ data Input
 type WaitTerminate = STM ()
 type SendSignal = MVar ()
 
-mainLoop :: Config -> Handle -> WaitTerminate -> SendSignal -> IO Terminated
-mainLoop mqtt h waitTerminate sendSignal = do
+mainLoop :: Config -> Connection -> WaitTerminate -> SendSignal -> IO Terminated
+mainLoop mqtt c waitTerminate sendSignal = do
     void $ forkMQTT waitTerminate $ keepAliveLoop mqtt sendSignal
     evalStateT
       (handshake >>= maybe (liftIO (cLogDebug mqtt "Connected") >> go) return)
       (MqttState (parse message) BS.empty [])
   where
     go = do
-      input <- waitForInput mqtt h
+      input <- waitForInput mqtt c
       case input of
         InErr err -> liftIO $
           return err
@@ -246,7 +248,7 @@ mainLoop mqtt h waitTerminate sendSignal = do
     handshake :: StateT MqttState IO (Maybe Terminated)
     handshake = do
         doSend msgConnect
-        input <- untilJust (getSome mqtt h >>= parseBytes)
+        input <- untilJust (getSome mqtt c >>= parseBytes)
         case input of
           InErr err -> return $ Just err
           InMsg someMsg -> return $ case someMsg of
@@ -272,11 +274,11 @@ mainLoop mqtt h waitTerminate sendSignal = do
     doSend :: (MonadIO io, SingI t) => Message t -> io ()
     doSend msg = liftIO $ do
         cLogDebug mqtt $ "Sending " ++ show (toMsgType msg)
-        writeTo h msg
+        writeTo c msg
         void $ tryPutMVar sendSignal ()
 
-waitForInput :: Config -> Handle -> StateT MqttState IO Input
-waitForInput mqtt h = do
+waitForInput :: Config -> Connection -> StateT MqttState IO Input
+waitForInput mqtt c = do
     let cmdChan = getCmds $ cCommands mqtt
     unconsumed <- gets msUnconsumed
     if BS.null unconsumed
@@ -284,16 +286,16 @@ waitForInput mqtt h = do
         -- wait until input is available, but don't retrieve it yet to avoid
         -- loosing anything
         input <- liftIO $ Async.race
-                  (void $ hLookAhead h)
+                  (void $ connectionWaitForInput c (-1))
                   (void $ atomically $ peekTChan cmdChan)
         -- now we have committed to one source and can actually read it
         case input of
-          Left () -> getSome mqtt h >>= parseUntilDone
+          Left () -> getSome mqtt c >>= parseUntilDone
           Right () -> InCmd <$> liftIO (atomically (readTChan cmdChan))
       else
         parseUntilDone unconsumed
   where
-    parseUntilDone bytes = parseBytes bytes >>= maybe (waitForInput mqtt h) return
+    parseUntilDone bytes = parseBytes bytes >>= maybe (waitForInput mqtt c) return
 
 -- | Parse the given 'ByteString' and update the current 'MqttState'.
 --
@@ -356,8 +358,8 @@ publishHandler mqtt msg = do
   where
     release = writeTChanIO (cPublished mqtt) msg
 
-getSome :: MonadIO m => Config -> Handle -> m ByteString
-getSome mqtt h = liftIO (BS.hGetSome h (cInputBufferSize mqtt))
+getSome :: MonadIO m => Config -> Connection -> m ByteString
+getSome mqtt c = liftIO (connectionGet c (cInputBufferSize mqtt))
 
 -- | Runs the 'IO' action in a seperate thread and cancels it if the 'mainLoop'
 -- exits earlier.
