@@ -23,6 +23,7 @@ module Network.MQTT
   -- ** Config accessors
   , cHost
   , cPort
+  , cTLS
   , cClean
   , cWill
   , cUsername
@@ -61,6 +62,7 @@ defaultConfig :: Commands -> TChan (Message 'PUBLISH) -> Config
 defaultConfig commands published = Config
     { cHost             = "localhost"
     , cPort             = 1883
+    , cTLS              = Nothing
     , cClean            = True
     , cWill             = Nothing
     , cUsername         = Nothing
@@ -85,7 +87,7 @@ run conf = do
     c <- connectTo ctx $ ConnectionParams
          { connectionHostname  = cHost conf
          , connectionPort      = cPort conf
-         , connectionUseSecure = Nothing
+         , connectionUseSecure = cTLS conf
          , connectionUseSocks  = Nothing
          }
     terminatedVar <- newEmptyTMVarIO
