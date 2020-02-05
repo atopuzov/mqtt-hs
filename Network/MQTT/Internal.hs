@@ -113,6 +113,8 @@ data Config
         -- ^ Hostname of the broker.
         , cPort :: PortNumber
         -- ^ Port of the broker.
+        , cTLS :: Maybe TLSSettings
+        -- ^ TLS settings
         , cClean :: Bool
         -- ^ Should the server forget subscriptions and other state on
         -- disconnects?
